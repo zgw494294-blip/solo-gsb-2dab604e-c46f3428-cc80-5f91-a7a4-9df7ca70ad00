@@ -1,0 +1,21 @@
+services:
+  stagecue:
+    build: .
+    image: stagecue:latest
+    container_name: stagecue
+    ports:
+      # 宿主机端口:容器端口。如需更换宿主机端口，改冒号左侧即可。
+      - "${STAGECUE_PORT:-8000}:8000"
+    environment:
+      # SQLite 数据库文件在容器内的位置（挂载到持久卷）
+      DATABASE_PATH: /data/stagecue.db
+      # gunicorn 调优（可选）
+      GUNICORN_WORKERS: "2"
+      GUNICORN_TIMEOUT: "60"
+      TZ: Asia/Shanghai
+    volumes:
+      - stagecue-data:/data
+    restart: unless-stopped
+
+volumes:
+  stagecue-data:

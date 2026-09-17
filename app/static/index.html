@@ -1,0 +1,180 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>舞台提示单 · StageCue</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Crect width='16' height='16' rx='3' fill='%23f0b429'/%3E%3Ccircle cx='8' cy='8' r='3' fill='%2314171f'/%3E%3C/svg%3E">
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+<header class="topbar">
+  <div class="brand">
+    <span class="brand-dot"></span>
+    <strong>舞台提示单</strong>
+    <span class="brand-sub">StageCue</span>
+  </div>
+
+  <div class="show-switcher">
+    <label for="showSelect">当前演出</label>
+    <select id="showSelect" title="切换演出"></select>
+    <button id="newShowBtn" class="btn" type="button">＋ 新建</button>
+    <button id="renameShowBtn" class="btn ghost" type="button">重命名</button>
+    <button id="deleteShowBtn" class="btn ghost danger" type="button">删除</button>
+  </div>
+
+  <div class="top-actions">
+    <button id="exportBtn" class="btn" type="button">⬇ 导出 JSON</button>
+    <button id="importBtn" class="btn" type="button">⬆ 导入 JSON</button>
+    <input type="file" id="importFile" accept="application/json,.json" hidden>
+  </div>
+</header>
+
+<div class="toolbar">
+  <button id="addCueBtn" class="btn primary" type="button">＋ 新增提示</button>
+  <span class="hint">提示类型：</span>
+  <span class="legend"><i class="dot lighting"></i>灯光</span>
+  <span class="legend"><i class="dot sound"></i>音效</span>
+  <span class="legend"><i class="dot scene"></i>换景</span>
+  <span class="hint" id="cycleHint"></span>
+
+  <div class="spacer"></div>
+
+  <div class="zoom-controls">
+    <button id="zoomOutBtn" class="btn icon" type="button" title="缩小">−</button>
+    <span id="zoomLabel" class="zoom-label" title="当前缩放比例">100%</span>
+    <button id="zoomInBtn" class="btn icon" type="button" title="放大">＋</button>
+    <button id="zoomFitBtn" class="btn ghost" type="button" title="适应全部内容">适应</button>
+  </div>
+</div>
+
+<main class="split">
+  <section class="timeline-panel">
+    <div id="timelineWrap" class="timeline-wrap">
+      <svg id="timeline" xmlns="http://www.w3.org/2000/svg"></svg>
+      <div id="timelineEmpty" class="timeline-empty" hidden>
+        这张提示单还没有提示，点击左上角「新增提示」开始编排。
+      </div>
+    </div>
+    <div class="timeline-tip">
+      提示：横向拖动<b>固定提示</b>可改时间；拖动色块右缘可改时长。
+      「在…之后」的提示会按依赖自动联动，不可直接拖动。滚轮缩放、按住空白处可平移。
+    </div>
+  </section>
+
+  <aside class="side-panel">
+    <div class="side-head">
+      <h2>提示列表</h2>
+      <span id="runtimeSummary" class="runtime-summary"></span>
+    </div>
+    <div id="cueTable" class="cue-table"></div>
+  </aside>
+</main>
+
+<!-- 提示编辑弹窗 -->
+<div id="editorModal" class="modal-backdrop" hidden>
+  <div class="modal" role="dialog" aria-modal="true" aria-labelledby="editorTitle">
+    <h3 id="editorTitle">新增提示</h3>
+
+    <form id="cueForm">
+      <div class="form-row">
+        <label for="fName">名称 <span class="req">*</span></label>
+        <input id="fName" type="text" maxlength="200" required placeholder="例如：第一束面光">
+      </div>
+
+      <div class="form-row two">
+        <div>
+          <label for="fType">类型</label>
+          <select id="fType">
+            <option value="lighting">灯光</option>
+            <option value="sound">音效</option>
+            <option value="scene">换景</option>
+          </select>
+        </div>
+        <div>
+          <label for="fDuration">时长（秒）</label>
+          <input id="fDuration" type="number" min="0" step="0.5" value="0">
+        </div>
+      </div>
+
+      <div class="form-row">
+        <label>开始时间</label>
+        <div class="mode-switch" role="radiogroup">
+          <label class="mode-opt">
+            <input type="radio" name="mode" value="fixed">
+            <span>固定时间</span>
+          </label>
+          <label class="mode-opt">
+            <input type="radio" name="mode" value="after" checked>
+            <span>在另一提示结束后</span>
+          </label>
+        </div>
+      </div>
+
+      <div class="form-row" id="fixedRow">
+        <label for="fFixedAt">固定开始时间（秒）</label>
+        <input id="fFixedAt" type="number" min="0" step="0.1" value="0">
+      </div>
+
+      <div class="form-row" id="afterRow">
+        <label for="fDepends">依赖提示</label>
+        <select id="fDepends"></select>
+        <div class="delay-row">
+          <label for="fDelay">结束后延迟（秒）</label>
+          <input id="fDelay" type="number" min="0" step="0.5" value="0">
+        </div>
+      </div>
+
+      <div class="form-row">
+        <label for="fNote">备注</label>
+        <textarea id="fNote" rows="2" maxlength="2000" placeholder="执行细节、灯位、音量等"></textarea>
+      </div>
+
+      <div id="livePreview" class="live-preview" hidden>
+        <span class="lp-label">实时计算：</span>
+        <span id="livePreviewText"></span>
+      </div>
+
+      <div id="editorConflict" class="editor-conflict" hidden>
+        <strong>无法保存：该修改会形成循环依赖。</strong>
+        <div id="editorConflictChains"></div>
+      </div>
+
+      <div class="modal-actions">
+        <button type="button" id="deleteCueBtn" class="btn danger ghost" hidden>删除此提示</button>
+        <div class="spacer"></div>
+        <button type="button" id="cancelCueBtn" class="btn ghost">取消</button>
+        <button type="submit" class="btn primary">保存</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- 新建 / 重命名演出弹窗 -->
+<div id="showModal" class="modal-backdrop" hidden>
+  <div class="modal small" role="dialog" aria-modal="true" aria-labelledby="showModalTitle">
+    <h3 id="showModalTitle">新建演出</h3>
+    <form id="showForm">
+      <div class="form-row">
+        <label for="sfName">演出名称 <span class="req">*</span></label>
+        <input id="sfName" type="text" maxlength="200" required>
+      </div>
+      <div class="form-row">
+        <label for="sfDesc">说明（可选）</label>
+        <textarea id="sfDesc" rows="2" maxlength="2000"></textarea>
+      </div>
+      <div class="modal-actions">
+        <div class="spacer"></div>
+        <button type="button" id="showCancelBtn" class="btn ghost">取消</button>
+        <button type="submit" class="btn primary">确定</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<div id="toast" class="toast" hidden></div>
+
+<script src="app.js"></script>
+</body>
+</html>
