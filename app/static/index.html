@@ -1,0 +1,216 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>舞台提示单 · Stage Cue</title>
+  <link rel="stylesheet" href="/static/style.css" />
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <span class="brand-mark">🎭</span>
+      <div>
+        <h1>舞台提示单</h1>
+        <span class="brand-sub">灯光 / 音效 / 换景 · 实时时间轴</span>
+      </div>
+    </div>
+    <div class="show-bar">
+      <label class="field">
+        <span>演出</span>
+        <select id="showSelect" title="选择演出"></select>
+      </label>
+      <button id="btnNewShow" class="btn" type="button">新建演出</button>
+      <button id="btnRenameShow" class="btn ghost" type="button">重命名</button>
+      <button id="btnDeleteShow" class="btn danger ghost" type="button">删除</button>
+      <span class="sep"></span>
+      <button id="btnImport" class="btn ghost" type="button">导入 JSON</button>
+      <input id="fileImport" type="file" accept="application/json,.json" hidden />
+      <button id="btnExportShow" class="btn ghost" type="button">导出当前演出</button>
+      <button id="btnExportAll" class="btn ghost" type="button">导出全部</button>
+    </div>
+  </header>
+
+  <main class="layout">
+    <section class="panel cues-panel">
+      <div class="panel-head">
+        <h2 id="currentShowName">提示列表</h2>
+        <div class="panel-actions">
+          <span id="showMeta" class="meta"></span>
+          <button id="btnAddCue" class="btn primary" type="button">＋ 新增提示</button>
+        </div>
+      </div>
+      <p id="showDescription" class="show-desc" hidden></p>
+      <div class="table-wrap">
+        <table class="cue-table">
+          <thead>
+            <tr>
+              <th class="col-num">编号</th>
+              <th class="col-type">类型</th>
+              <th>标题</th>
+              <th class="col-trigger">触发方式</th>
+              <th class="col-time">开始</th>
+              <th class="col-time">结束</th>
+              <th class="col-ops"></th>
+            </tr>
+          </thead>
+          <tbody id="cueTbody"></tbody>
+        </table>
+        <div id="cuesEmpty" class="empty-hint" hidden>
+          还没有提示。点击「＋ 新增提示」创建第一条灯光、音效或换景提示。
+        </div>
+      </div>
+    </section>
+
+    <section class="panel timeline-panel">
+      <div class="panel-head">
+        <h2>时间轴</h2>
+        <div class="panel-actions">
+          <span class="legend">
+            <i class="dot light"></i>灯光
+            <i class="dot sound"></i>音效
+            <i class="dot scene"></i>换景
+            <i class="legend-fixed"></i>固定时间
+            <i class="legend-after"></i>依赖触发
+          </span>
+          <span class="meta" id="timelineInfo"></span>
+          <div class="zoom-ctl">
+            <button id="btnZoomOut" class="btn icon" type="button" title="缩小">－</button>
+            <span id="zoomLabel" class="zoom-label">100%</span>
+            <button id="btnZoomIn" class="btn icon" type="button" title="放大">＋</button>
+            <button id="btnZoomReset" class="btn ghost small" type="button">重置</button>
+          </div>
+        </div>
+      </div>
+      <div id="timelineScroll" class="timeline-scroll">
+        <div id="timelineInner" class="timeline-inner">
+          <div class="tl-row tl-ruler-row">
+            <div class="tl-corner">
+              <div class="corner-labels">
+                <span>类型</span><span>轨道</span>
+              </div>
+            </div>
+            <div id="tlRuler" class="tl-ruler"></div>
+          </div>
+          <div id="tlLanes" class="tl-lanes"></div>
+          <div id="tlDragTip" class="drag-tip" hidden></div>
+        </div>
+      </div>
+      <p class="timeline-help">
+        提示：横向拖动<strong>固定时间</strong>提示可改时间；拖动条体右边缘改时长，后继提示立即联动。
+        按住 <kbd>Ctrl</kbd>/<kbd>⌘</kbd> + 滚轮缩放（或使用右上角按钮），普通滚轮横向滚动。
+      </p>
+      <div id="globalCycle" class="cycle-banner" hidden>
+        <strong>⚠ 当前提示单存在循环依赖：</strong><span id="globalCycleText"></span>
+        <div class="chain" id="globalCycleChain"></div>
+      </div>
+    </section>
+  </main>
+
+  <!-- 提示编辑弹窗 -->
+  <div id="cueModal" class="modal-backdrop" hidden>
+    <div class="modal">
+      <div class="modal-head">
+        <h3 id="cueModalTitle">新增提示</h3>
+        <button id="cueModalClose" class="btn icon" type="button">✕</button>
+      </div>
+      <form id="cueForm" class="modal-body">
+        <div class="form-row two">
+          <label class="field">
+            <span>编号 <em>（留空自动生成）</em></span>
+            <input id="fNumber" type="text" maxlength="40" placeholder="如 L3 / S2 / SC1" />
+          </label>
+          <label class="field">
+            <span>类型</span>
+            <select id="fType">
+              <option value="light">灯光</option>
+              <option value="sound">音效</option>
+              <option value="scene">换景</option>
+            </select>
+          </label>
+        </div>
+        <label class="field">
+          <span>标题</span>
+          <input id="fTitle" type="text" maxlength="200" required placeholder="如：面光全亮" />
+        </label>
+        <label class="field">
+          <span>备注</span>
+          <textarea id="fNotes" rows="2" maxlength="2000" placeholder="操作要点、通道、道具位置……"></textarea>
+        </label>
+
+        <fieldset class="trigger-box">
+          <legend>触发方式</legend>
+          <div class="seg">
+            <label><input type="radio" name="startMode" value="fixed" /> 固定时间</label>
+            <label><input type="radio" name="startMode" value="after" /> 在另一提示结束后</label>
+          </div>
+
+          <div id="modeFixed" class="mode-pane">
+            <label class="field inline-num">
+              <span>演出开始后</span>
+              <input id="fFixed" type="number" min="0" step="0.1" />
+              <span>秒</span>
+            </label>
+          </div>
+          <div id="modeAfter" class="mode-pane" hidden>
+            <div class="form-row two">
+              <label class="field">
+                <span>前置提示</span>
+                <select id="fPredecessor"></select>
+              </label>
+              <label class="field inline-num">
+                <span>结束后延迟</span>
+                <input id="fDelay" type="number" min="0" step="0.1" value="0" />
+                <span>秒</span>
+              </label>
+            </div>
+          </div>
+        </fieldset>
+
+        <label class="field inline-num">
+          <span>持续时长</span>
+          <input id="fDuration" type="number" min="0.1" step="0.1" value="1" />
+          <span>秒</span>
+        </label>
+
+        <div id="cueLive" class="live-preview"></div>
+        <div id="cueFormError" class="form-error" hidden></div>
+
+        <div class="modal-foot">
+          <button type="button" id="cueCancel" class="btn ghost">取消</button>
+          <button type="submit" class="btn primary">保存</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- 演出新建/重命名弹窗 -->
+  <div id="showModal" class="modal-backdrop" hidden>
+    <div class="modal narrow">
+      <div class="modal-head">
+        <h3 id="showModalTitle">新建演出</h3>
+        <button id="showModalClose" class="btn icon" type="button">✕</button>
+      </div>
+      <form id="showForm" class="modal-body">
+        <label class="field">
+          <span>演出名称</span>
+          <input id="sName" type="text" maxlength="200" required />
+        </label>
+        <label class="field">
+          <span>说明（可选）</span>
+          <textarea id="sDescription" rows="3" maxlength="2000"></textarea>
+        </label>
+        <div id="showFormError" class="form-error" hidden></div>
+        <div class="modal-foot">
+          <button type="button" id="showCancel" class="btn ghost">取消</button>
+          <button type="submit" class="btn primary">保存</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <div id="toast" class="toast" hidden></div>
+  <script src="/static/scheduler.js"></script>
+  <script src="/static/app.js"></script>
+</body>
+</html>

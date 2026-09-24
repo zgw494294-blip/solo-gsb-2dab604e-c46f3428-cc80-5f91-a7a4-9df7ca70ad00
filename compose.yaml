@@ -1,0 +1,27 @@
+services:
+  stagecue:
+    build: .
+    image: stagecue:latest
+    container_name: stagecue
+    ports:
+      - "${STAGECUE_PORT:-8000}:8000"
+    environment:
+      # SQLite database file inside the container (mounted volume below)
+      STAGECUE_DB: /data/stagecue.db
+      # Insert demo show on first boot: 1=yes, 0=no
+      STAGECUE_SEED: "1"
+      # Internal listen port (host mapping uses STAGECUE_PORT above)
+      PORT: "8000"
+      GUNICORN_WORKERS: "1"
+      GUNICORN_THREADS: "4"
+    volumes:
+      - stagecue-data:/data
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/healthz')"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
+volumes:
+  stagecue-data:
